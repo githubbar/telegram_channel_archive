@@ -1,2 +1,2 @@
 # telegram_channel_archive
-Telegram scraping with extended capacity and transparency for archiving the posts and content associated with the post, such as images, files and comments.
+Telegram scraping for archiving the channels, messages and related content such as images, files and comments into sqlite DB.
