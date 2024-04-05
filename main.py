@@ -4,12 +4,15 @@ from telescraper import scraper
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 import datetime
+from dateutil.tz import *
 import sqlite3
 
 # decided periods to scrape    
-periods = [(datetime.datetime(2023, 2, 23), datetime.datetime(2023, 2, 24))]
+periods = [(datetime.datetime(2023, 2, 23, 17, 00), datetime.datetime(2023, 2, 23, 18, 00))]
+# periods = [(datetime.datetime(2022, 2, 27, 5, 32).astimezone(tzutc()), datetime.datetime(2022, 2, 27, 5, 33).astimezone(tzutc()))]
 
 channel_list = ["https://t.me/activatica"]
+# channel_list = ["https://t.me/imnotbozhena"]
 
 async def config_session(inifile="config.ini"):
     config = scraper.configparser.ConfigParser()
@@ -42,10 +45,10 @@ async def config_session(inifile="config.ini"):
         except SessionPasswordNeededError:
             print("Your account has two-step verification enabled. Please enter your password.")
             await client.sign_in(password=input('Password: '))
-    return [con, client]
+    return con, client
 
 async def main():
-    [con, client] = config_session()
+    con, client = await config_session()
     ch_list = [channel_list[0]]
     # TEMP
     con = sqlite3.connect("channels.db")
@@ -56,11 +59,11 @@ async def main():
             channel_info = await scraper.get_channel(usr, client)
             scraper.save_channel_to_db(channel_info, con) 
             my_channel = await client.get_entity(usr)
-            print("Done with channel info")
+            print("--------- Done with channel info ---------")
             for period in periods:
-                print("start of messages")
+                print("--------- Start of messages ---------")
                 messages = await scraper.scrape_messages(period, client, my_channel)
-                scraper.save_messages_to_db(messages, con) 
+                scraper.save_messages_to_db(messages, channel_info['id'], con) 
 
             con.commit()
             break
@@ -72,4 +75,6 @@ async def main():
 
 
 if __name__ == "__main__":
-  main()
+    import asyncio
+    asyncio.run(main())  
+    

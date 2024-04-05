@@ -6,6 +6,7 @@ import json
 import asyncio
 import datetime
 from dateutil.relativedelta import relativedelta
+
 import os, sys
 import numpy as np
 import time
@@ -28,10 +29,6 @@ import telethon.tl.types as media_types
 import os
 from collections import defaultdict
 
-
-# In[ ]:
-
-
 # some functions to parse json date correctly
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, o):
@@ -42,9 +39,6 @@ class DateTimeEncoder(json.JSONEncoder):
             return list(o)
 
         return json.JSONEncoder.default(self, o)
-    
-
-# In[ ]:
 
 # class Scraper:
 # Create DB tables
@@ -52,6 +46,8 @@ def create_db(con):
     cur = con.cursor()
     cur.execute("DROP TABLE IF EXISTS channel")
     cur.execute("DROP TABLE IF EXISTS message")
+    cur.execute("DROP TABLE IF EXISTS media")    
+
     cur.execute("""CREATE TABLE channel(
     id INTEGER PRIMARY KEY,
     title, username, description, total_particiant_time, total_participants, participants, 
@@ -61,19 +57,20 @@ def create_db(con):
     )""")
     cur.execute("""CREATE TABLE message(
     id INTEGER PRIMARY KEY,
-    date, post_author, text, mentions, total_views, total_fwds, 
-    hidden_edit, last_edit_date, scheduled, via_bot_id, ttl_period, total_replies, replies,
-    reactions, fwd, media
+    channel_id INTEGER NOT NULL,
+    date, post_author, text, mentions, total_views, total_fwds, hidden_edit, last_edit_date, scheduled, via_bot_id, noforwards, ttl_period, total_replies, replies, reactions,
+    fwd_title, fwd_username, fwd_channel_id
     )""")
-
-
-
-
-# In[ ]:
-
+    cur.execute("""CREATE TABLE media(
+    id INTEGER PRIMARY KEY,
+    message_id INTEGER NOT NULL,
+    media BLOB
+    )""")
 
 async def get_replies(message, client, my_channel):
     replies = []
+    # TEMP: 
+    return replies
     comment_count = 0
     comment_groups = {}
     
@@ -139,16 +136,9 @@ async def get_replies(message, client, my_channel):
     
     return replies
 
-
-# In[ ]:
-
-
 async def get_media(message, client, my_channel, groups, is_group, group_main_id, is_comment = False, comment_media_id = None):
-#     print("Processing media")
+    print("Processing media")
     media = [{}]
-
-    # TEMP
-    return media
     if message.media:
 #         print("Has media")
         if message.photo or (hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "image"):
@@ -168,12 +158,13 @@ async def get_media(message, client, my_channel, groups, is_group, group_main_id
             print(message.media)
             print('message id', message.id)
             
+        # TODO: grouped images? does this work?
         if message.grouped_id:
-            media.extend(await process_media_grouped_message(message, client, my_channel, groups, is_group, group_main_id, is_comment, comment_media_id))
+            media.extend(await process_media(message, client, my_channel, groups, is_group, group_main_id, is_comment, comment_media_id))
     
     return media
 
-async def process_media_grouped_message(message, client, my_channel, groups, is_group, group_main_id, is_comment=False, comment_media_id = None):
+async def process_media(message, client, my_channel, groups, is_group, group_main_id, is_comment=False, comment_media_id = None):
     print("Group message")
     media = []
     media_counter = 1
@@ -182,7 +173,6 @@ async def process_media_grouped_message(message, client, my_channel, groups, is_
         if m.id != message.id:
             if m.photo or (hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "image"):
                 media_obj = await process_image(m, client, my_channel, groups, is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id=comment_media_id)
-                
             elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "video":
                 media_obj = process_video(m)
             elif hasattr(m.media, 'webpage'):
@@ -200,13 +190,13 @@ async def process_media_grouped_message(message, client, my_channel, groups, is_
             media_counter+=1
     return media
 
-
 async def process_image(message, client, my_channel, groups, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
 #     print("Photo: True")
     media_obj = {}
     media_obj['type'] = "photo"
     folder = './temp'
     folder_path = str(folder+"/"+"images/") # this will be in images folder of the channel
+    media_obj['group_main_id'] = group_main_id
     media_obj['image_path'] = await download_media(message, folder_path, client, groups, "photo", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
     return media_obj
 
@@ -262,7 +252,6 @@ async def process_document(message, client, groups, is_group, group_main_id, med
     media_obj['document_path'] = await download_media(message, folder_path, client, groups, "doc", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
     return media_obj
 
-
 async def download_media(message, folder_path, client, groups, file_type, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
 #     print("Downloading media")
     wait_time = 1
@@ -290,10 +279,6 @@ async def download_media(message, folder_path, client, groups, file_type, is_gro
             time.sleep(wait_time)
             wait_time *= 2 # Exponential backoff
     print(f"Failed to download file after {max_retries} attempts. {message.media}")
-
-
-# In[ ]:
-
 
 async def get_channel(usr, client):
     """
@@ -351,39 +336,14 @@ async def get_channel(usr, client):
             'chat_id': channel_full_info.chats[1].id,
         })
         l = []
-        # for attr, item in channel_full_info.chats[1].__dict__.items():
-        #     if isinstance(item, bool):
-        #         l.append(f'chat_{attr}')
-        # print(','.join(l))        
     
         for attr, value in channel_full_info.chats[1].__dict__.items():
             if isinstance(value, bool):
                 channel_info[f'chat_{attr}'] = value    
     return channel_info
 
-# Save to JSON file
-async def save_channel_to_json(channel_info):    
-    # Folder and Image handling
-    # folder =  channel_info['username']  # Ensure folder name is safe
-    folder = re.sub(r'[^a-zA-Z0-9 \n\.]', '_', channel_info['username'])  # Ensure folder name is safe
-
-    # Return if channel info already saved
-    if not os.path.exists(folder):
-        os.makedirs(folder, exist_ok=True)
-
-    # Downloading and saving image
-    path = await client.download_profile_photo(my_channel)
-    renamed_path = folder+"/"+"channel_photo"+str(".")+str(path.rsplit('.', 1)[-1])
-    os.rename(path, renamed_path)
-
-    channel_info['image_path'] = renamed_path
-
-    # Dumping info to json
-    with open(folder+'/channel_info.json', 'w', encoding='utf8') as outfile:
-            json.dump(channel_info, outfile, cls=DateTimeEncoder, ensure_ascii=False)
-
-# Save to DB
 def save_channel_to_db(channel_info, con):    
+    """ Save Channel fields to DB """
     cur = con.cursor()
     columns = ', '.join(channel_info.keys())
     placeholders = ', '.join('?' * len(channel_info))
@@ -393,13 +353,10 @@ def save_channel_to_db(channel_info, con):
     # print(values)
     cur.execute(sql, values)
 
-
-# In[ ]:
-
-
 async def get_message_dict(message, client, my_channel, groups, is_group = False, group_main_id = None):
     current_message = {}
     current_message['id'] = message.id
+    current_message['channel_id'] = my_channel.id
     current_message['date'] = message.date
     print("Date:", message.date)
     current_message['post_author'] = message.post_author if message.post_author else "channel"
@@ -411,38 +368,30 @@ async def get_message_dict(message, client, my_channel, groups, is_group = False
     current_message['hidden_edit'] = message.edit_hide
     current_message['last_edit_date'] = message.edit_date
     current_message['scheduled'] = message.from_scheduled
-    if message.via_bot_id:
-        current_message['via_bot_id'] = message.via_bot_id
+    current_message['via_bot_id'] = message.via_bot_id
     current_message['noforwards'] = message.noforwards
-    if message.ttl_period:
-        current_message['ttl_period'] = message.ttl_period
+    current_message['ttl_period'] = message.ttl_period
     if message.replies and message.replies.replies != 0:
         current_message['total_replies'] = message.replies.replies
         current_message['replies'] = await get_replies(message, client, my_channel)
-
-                
     if message.reactions:
         current_message['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in message.reactions.results if hasattr(reaction.reaction, 'emoticon')]
+    current_message['fwd_title'], current_message['fwd_channel_id'], current_message['fwd_username'] = None, None, None
     if message.fwd_from:
-        current_message['fwd'] = {}
         try:
             fwd_from_channel = await client.get_entity(PeerChannel(int(message.fwd_from.from_id.channel_id)))
             fwd_channel_info = await client(GetFullChannelRequest(channel=fwd_from_channel))
-            current_message['fwd']['fwd_title'] = fwd_channel_info.chats[0].title
-            current_message['fwd']['fwd_username'] = fwd_channel_info.chats[0].username
+            current_message['fwd_title'] = fwd_channel_info.chats[0].title
+            current_message['fwd_username'] = fwd_channel_info.chats[0].username
         except:
             if message.fwd_from.from_id:
-                current_message['fwd']['channel_id'] = int(message.fwd_from.from_id.channel_id)
+                current_message['fwd_channel_id'] = int(message.fwd_from.from_id.channel_id)
             if message.fwd_from.from_name:
-                current_message['fwd']['fwd_title'] = message.fwd_from.from_name
+                current_message['fwd_title'] = message.fwd_from.from_name
     
     current_message['media'] = await get_media(message, client, my_channel, groups, is_group, group_main_id)
     
     return current_message
-
-
-# In[99]:
-
 
 async def scrape_messages(period, client, my_channel):
     start_time = datetime.datetime.now()
@@ -463,16 +412,16 @@ async def scrape_messages(period, client, my_channel):
         # if the message is part of the group keep track of IDs that belong to the group
         if message.grouped_id:
             groups.setdefault(message.grouped_id, []).append(message.id)
-            #skip the message as we will go through them separatly
+            #skip the message as we will go through them separately
             continue
                 
         current_message = await get_message_dict(message, client, my_channel, groups)
         messages[count] = current_message
         print("")
         count += 1
-        # TEMP
-        return messages 
-        # END TEMP
+        # # TEMP
+        # return messages 
+        # # END TEMP
 
     # Coming back to the grouped messages
     for group in groups:
@@ -507,30 +456,37 @@ async def scrape_messages(period, client, my_channel):
         count += 1
     return messages
 
-
-async def save_messages_to_json(messages, folder):    
-#     print(messages)
-    # --------------------- Record messages to JSON file
-    with open(folder+"/"+'messages_'+dt1.strftime('%m%d%y')+'-'+dt2.strftime('%m%d%y')+'.json', 'w', encoding='utf8') as outfile:
-            json.dump(messages, outfile, cls=DateTimeEncoder, ensure_ascii=False)
-
-    end_time = datetime.now()
-    print('Done with messages between {} and {}  -------Duration: {}, count: {}'.format(dt1, dt2, end_time - start_time, count))
-
-    return messages
-
-def save_messages_to_db(messages, con):    
+def save_messages_to_db(messages, channel_id, con):    
+    """ Save Message fields to DB """
     cur = con.cursor()
     for msg in messages.items():
-        # TODO: tuple here, subindex it
-        columns = ', '.join(msg.keys())
-        placeholders = ', '.join('?' * len(channel_info))
+        msg_col_names = [key for key in msg[1].keys() if key != 'media']
+        # add channel_id to all the column names
+        msg_col_values = [msg[1][key] for key in msg_col_names] 
+        columns = ', '.join(msg_col_names)
+        placeholders = ', '.join('?' * len(msg_col_names))
         sql = 'INSERT INTO message ({}) VALUES ({})'.format(columns, placeholders)
-        values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in channel_info.values()]
+        values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in msg_col_values]
+        cur.execute(sql, values)
+        save_media_to_db(msg[1]['media'], cur.lastrowid, con)        
 
-        print(sql)
-        print(values)
-   
-    cur.execute(sql, values)
+def save_media_to_db(media, msg_id, con):    
+    """ Save media blobs to DB """
+    cur = con.cursor()
+    for m in media:    
+        print(m)
+        data = convertToBinaryData(m['image_path'])
+        sql = 'INSERT INTO media (message_id, media) VALUES (?, ?)'
+        values = (msg_id, data)
+        # print(sql)
+        cur.execute(sql, values)
+
+
+def convertToBinaryData(filename):
+    # Convert digital data to binary format
+    with open(filename, 'rb') as file:
+        blobData = file.read()
+    return blobData
+
 
 

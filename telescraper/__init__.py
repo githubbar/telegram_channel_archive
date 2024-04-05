@@ -2,6 +2,8 @@
 # coding: utf-8
 import datetime
 import sqlite3
+start_time = None
+count = 0
 
 # Register SQLITE datetime adapters and converters as per https://docs.python.org/3/library/sqlite3.html#sqlite3-adapter-converter-recipes
 def adapt_date_iso(val):
