@@ -46,6 +46,7 @@ def create_db(con):
     cur = con.cursor()
     cur.execute("DROP TABLE IF EXISTS channel")
     cur.execute("DROP TABLE IF EXISTS message")
+    cur.execute("DROP TABLE IF EXISTS comment")
     cur.execute("DROP TABLE IF EXISTS media")    
 
     cur.execute("""CREATE TABLE channel(
@@ -58,20 +59,69 @@ def create_db(con):
     cur.execute("""CREATE TABLE message(
     id INTEGER PRIMARY KEY,
     channel_id INTEGER NOT NULL,
-    date, post_author, text, mentions, total_views, total_fwds, hidden_edit, last_edit_date, scheduled, via_bot_id, noforwards, ttl_period, total_replies, replies, reactions,
+    date, post_author, text, mentions, total_views, total_fwds, hidden_edit, last_edit_date, scheduled, via_bot_id, noforwards, ttl_period, reactions,
     fwd_title, fwd_username, fwd_channel_id
     )""")
+    cur.execute("""CREATE TABLE comment(
+    id INTEGER PRIMARY KEY,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    date, text, reactions, reply_to_msg_id, quote_text, 
+    from_user_id INTEGER,
+    from_channel_id INTEGER,
+    channel_name, channel_username, 
+    fwd_title, fwd_username, fwd_channel_id
+    )""")    
     cur.execute("""CREATE TABLE media(
     id INTEGER PRIMARY KEY,
+    channel_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
+    comment_id INTEGER,
+    file_name,
     media BLOB
     )""")
 
-async def get_replies(message, client, my_channel):
+async def get_comment_dict(comment, client, message_id, my_channel, groups, is_group = False, group_main_id = None):
+    comment_obj = {}
+    comment_obj['id'] = comment.id
+    comment_obj['channel_id'] = my_channel.id    
+    comment_obj['date'] = comment.date
+    comment_obj['text'] = comment.text
+    comment_obj['message_id'] = message_id
+    if hasattr(comment.from_id, 'user_id'):
+        comment_obj['from_user_id'] = comment.from_id.user_id
+    elif hasattr(comment.from_id, 'channel_id'):
+        comment_obj['from_channel_id'] = comment.from_id.channel_id
+        try:
+            comment_channel = await client.get_entity(PeerChannel(int(comment.from_id.channel_id)))
+            comment_channel_info = await client(GetFullChannelRequest(channel=comment_channel))
+            comment_obj['channel_name'] = comment_channel_info.chats[0].title
+            comment_obj['channel_username'] = comment_channel_info.chats[0].username
+        except:
+            pass
+        comment_obj['reply_to_msg_id'] = comment.reply_to_msg_id
+        comment_obj['quote_text'] = comment.quote_text
+    if comment.reactions:
+        comment_obj['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in comment.reactions.results if hasattr(reaction.reaction, 'emoticon')]
+    comment_obj['fwd_title'], comment_obj['fwd_channel_id'], comment_obj['fwd_username'] = None, None, None
+    if comment.fwd_from:
+        try:
+            fwd_from_channel = await client.get_entity(PeerChannel(int(comment.fwd_from.from_id.channel_id)))
+            fwd_channel_info = await client(GetFullChannelRequest(channel=fwd_from_channel))
+            comment_obj['fwd_title'] = fwd_channel_info.chats[0].title
+            comment_obj['fwd_username'] = fwd_channel_info.chats[0].username
+        except:
+            if comment.fwd_from.from_id:
+                comment_obj['fwd_channel_id'] = int(comment.fwd_from.from_id.channel_id)
+            if comment.fwd_from.from_name:
+                comment_obj['fwd_title'] = comment.fwd_from.from_name
+    
+    comment_obj['media'] = await get_media(comment, client, my_channel, groups, is_group, group_main_id)
+    
+    return comment_obj
+
+async def get_comments(message, client, my_channel):
     replies = []
-    # TEMP: 
-    return replies
-    comment_count = 0
     comment_groups = {}
     
     #find the replies in chat
@@ -81,8 +131,11 @@ async def get_replies(message, client, my_channel):
     my_chat = await client.get_entity(chat_entity)
 
     # process replies
-    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id, limit = 25):
-        comment_obj = {}
+    # TODO: error here telethon iter_messages channel post at channel_list = ["https://t.me/imnotbozhena"]
+
+    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id):
+        comment_obj = await get_comment_dict(comment, client, message.id, my_channel, comment_groups)
+
         # if the message is part of the group keep track of ID that belong to the group
         if comment.grouped_id:
             comment_groups.setdefault(comment.grouped_id, []).append(comment.id)
@@ -90,75 +143,34 @@ async def get_replies(message, client, my_channel):
             if comment.text == "":
                 #skip the message as we will go through it when downloading media
                 continue
-        if hasattr(comment.from_id, 'user_id'):
-            comment_obj['user id'] = comment.from_id.user_id
-        elif hasattr(comment.from_id, 'channel_id'):
-            comment_obj['channel id'] = comment.from_id.channel_id
-            try:
-                comment_channel = await client.get_entity(PeerChannel(int(comment.from_id.channel_id)))
-                comment_channel_info = await client(GetFullChannelRequest(channel=comment_channel))
-                comment_obj['channel name'] = comment_channel_info.chats[0].title
-                comment_obj['channel username'] = comment_channel_info.chats[0].username
-            except:
-                pass
-
-        comment_obj['comment date'] = comment.date
-        comment_obj['comment text'] = comment.message
-
-
-        if comment.reactions:
-            comment_obj['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in comment.reactions.results if hasattr(reaction.reaction, 'emoticon')]
         
-        if comment.fwd_from:
-            comment_obj['fwd'] = {}
-            try:
-                fwd_from_channel = await client.get_entity(PeerChannel(int(comment.fwd_from.from_id.channel_id)))
-                fwd_channel_info = await client(GetFullChannelRequest(channel=fwd_from_channel))
-                comment_obj['fwd']['fwd_title'] = fwd_channel_info.chats[0].title
-                comment_obj['fwd']['fwd_username'] = fwd_channel_info.chats[0].username
-            except:
-                if comment.fwd_from.from_id:
-                    comment_obj['fwd']['channel_id'] = int(comment.fwd_from.from_id.channel_id)
-                if comment.fwd_from.from_name:
-                    comment_obj['fwd']['fwd_title'] = comment.fwd_from.from_name
-        
-        
-        
-        # Media in comments naminng is photo[message_id]_comment[comment_number]
-        if comment.media:
-            comment_obj['media'] = await get_media(comment, client, my_chat, comment_groups, is_group = False, group_main_id = None, is_comment = True, comment_media_id = str(message.id)+"_comment"+str(comment_count))
-
-
         if comment_obj:
                 replies.append(comment_obj)
 
-        comment_count+=1
-    
     return replies
 
 async def get_media(message, client, my_channel, groups, is_group, group_main_id, is_comment = False, comment_media_id = None):
-    print("Processing media")
+    # print("--------- Processing media ---------")
     media = [{}]
     if message.media:
 #         print("Has media")
         if message.photo or (hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "image"):
             media[0] = await process_image(message, client, my_channel, groups, is_group, group_main_id, is_comment = is_comment, comment_media_id=comment_media_id)
-        elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "video":
-            media[0] = process_video(message)
-        elif hasattr(message.media, 'webpage'):
-            if hasattr(message.media.webpage, 'url'):
-                media[0]['url'] = message.media.webpage.url
-        elif hasattr(message.media, 'poll'):
-            media[0] = process_poll(message)
-        elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "audio":
-            media[0] = process_audio(message)
+        # elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "video":
+        #     media[0] = process_video(message)
+        # elif hasattr(message.media, 'webpage'):
+        #     if hasattr(message.media.webpage, 'url'):
+        #         media[0]['url'] = message.media.webpage.url
+        # elif hasattr(message.media, 'poll'):
+        #     media[0] = process_poll(message)
+        # elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "audio":
+        #     media[0] = process_audio(message)
         elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "application":
             media[0] = await process_document(message, client, groups, is_group, group_main_id, is_comment = is_comment, comment_media_id = comment_media_id)
         else:
             print(message.media)
             print('message id', message.id)
             
-        # TODO: grouped images? does this work?
         if message.grouped_id:
             media.extend(await process_media(message, client, my_channel, groups, is_group, group_main_id, is_comment, comment_media_id))
     
@@ -173,15 +185,15 @@ async def process_media(message, client, my_channel, groups, is_group, group_mai
         if m.id != message.id:
             if m.photo or (hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "image"):
                 media_obj = await process_image(m, client, my_channel, groups, is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id=comment_media_id)
-            elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "video":
-                media_obj = process_video(m)
-            elif hasattr(m.media, 'webpage'):
-                if hasattr(m.media.webpage, 'url'):
-                    media_obj['url'] = m.media.webpage.url
-            elif hasattr(m.media, 'poll'):
-                media_obj = process_poll(m)
-            elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "audio":
-                media_obj = process_audio(m)
+            # elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "video":
+            #     media_obj = process_video(m)
+            # elif hasattr(m.media, 'webpage'):
+            #     if hasattr(m.media.webpage, 'url'):
+            #         media_obj['url'] = m.media.webpage.url
+            # elif hasattr(m.media, 'poll'):
+            #     media_obj = process_poll(m)
+            # elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "audio":
+            #     media_obj = process_audio(m)
             elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "application":
                 media_obj = await process_document(m, client, groups, is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
             
@@ -197,7 +209,7 @@ async def process_image(message, client, my_channel, groups, is_group, group_mai
     folder = './temp'
     folder_path = str(folder+"/"+"images/") # this will be in images folder of the channel
     media_obj['group_main_id'] = group_main_id
-    media_obj['image_path'] = await download_media(message, folder_path, client, groups, "photo", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
+    media_obj['media_path'] = await download_media(message, folder_path, client, groups, "photo", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
     return media_obj
 
 def process_video(message):
@@ -239,7 +251,7 @@ def process_audio(message):
     return media_obj
 
 async def process_document(message, client, groups, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
-#     print("Doc: True")
+    print("Doc: True")
     media_obj = {}
     media_obj['type'] = "document"
     media_obj['document_size'] = message.media.document.size
@@ -249,7 +261,7 @@ async def process_document(message, client, groups, is_group, group_main_id, med
         media_obj['file_name'] = None
     folder = './temp'
     folder_path = str(folder+"/"+"documents/")
-    media_obj['document_path'] = await download_media(message, folder_path, client, groups, "doc", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
+    media_obj['media_path'] = await download_media(message, folder_path, client, groups, "doc", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
     return media_obj
 
 async def download_media(message, folder_path, client, groups, file_type, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
@@ -309,7 +321,7 @@ async def get_channel(usr, client):
     my_channel = await client.get_entity(entity)
     channel_full_info = await client(GetFullChannelRequest(channel=my_channel))
     chat_count = len(channel_full_info.chats)
-    print("Printing channel information")
+    # print("--------- Printing channel information ---------")
 
 
     # General channel information
@@ -325,11 +337,11 @@ async def get_channel(usr, client):
     for attr, value in channel_full_info.chats[0].__dict__.items():
         if isinstance(value, bool):
             channel_info[attr] = value
-    print("Title: ", channel_full_info.chats[0].title)
-    print("username: ", channel_full_info.chats[0].username)
+    print(" Title: ", channel_full_info.chats[0].title)
+    print(" username: ", channel_full_info.chats[0].username)
 
     if chat_count > 1: # if more than 1, then the channel has a chat
-        print("chat:", True)
+        print(" chat:", True)
         channel_info.update({
             'chat': True,
             'chat_title': channel_full_info.chats[1].title,
@@ -358,7 +370,7 @@ async def get_message_dict(message, client, my_channel, groups, is_group = False
     current_message['id'] = message.id
     current_message['channel_id'] = my_channel.id
     current_message['date'] = message.date
-    print("Date:", message.date)
+    # print("Date:", message.date)
     current_message['post_author'] = message.post_author if message.post_author else "channel"
     current_message['text'] = message.text
     current_message['mentions'] = message.mentioned
@@ -371,9 +383,7 @@ async def get_message_dict(message, client, my_channel, groups, is_group = False
     current_message['via_bot_id'] = message.via_bot_id
     current_message['noforwards'] = message.noforwards
     current_message['ttl_period'] = message.ttl_period
-    if message.replies and message.replies.replies != 0:
-        current_message['total_replies'] = message.replies.replies
-        current_message['replies'] = await get_replies(message, client, my_channel)
+  
     if message.reactions:
         current_message['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in message.reactions.results if hasattr(reaction.reaction, 'emoticon')]
     current_message['fwd_title'], current_message['fwd_channel_id'], current_message['fwd_username'] = None, None, None
@@ -393,35 +403,34 @@ async def get_message_dict(message, client, my_channel, groups, is_group = False
     
     return current_message
 
-async def scrape_messages(period, client, my_channel):
-    start_time = datetime.datetime.now()
-    messages = {}
-    count = 0
+async def scrape_messages(period, client, my_channel, reply_to_id=None):
+    messages = []
     groups = {}
+    # Handle time periods or no time periods
+    if period[0]  and period[1]:
+        dt1, dt2 = map(lambda dt: dt.replace(tzinfo=datetime.timezone.utc), period)
+    else:
+        dt1 = dt2 = None
 
-    dt1, dt2 = map(lambda dt: dt.replace(tzinfo=datetime.timezone.utc), period)
-    print("")
-    print("starting:", dt1, dt2)
+    async for message in client.iter_messages(my_channel, reply_to = reply_to_id, offset_date = dt2):
+        if (dt1 and dt2) and dt1 > message.date and not reply_to_id: # skip if not in date range, but keep all the comments
+            break 
 
-    async for message in client.iter_messages(my_channel, offset_date = dt2):
-        if dt1 > message.date:
-            break
-
-        print("ID:", message.id)
-        
         # if the message is part of the group keep track of IDs that belong to the group
         if message.grouped_id:
             groups.setdefault(message.grouped_id, []).append(message.id)
-            #skip the message as we will go through them separately
+            #skip the message as we will go through it when downloading media
             continue
-                
+        
+        print("ID:", message.id)        
+        
+
+        # [print(f'    {c}') for c in comments]
+        print("----------------------------------------------------------")        
         current_message = await get_message_dict(message, client, my_channel, groups)
-        messages[count] = current_message
-        print("")
-        count += 1
-        # # TEMP
-        # return messages 
-        # # END TEMP
+        comments = await get_comments(message, client, my_channel)        
+        current_message['comments'] = comments
+        messages.append(current_message)
 
     # Coming back to the grouped messages
     for group in groups:
@@ -433,54 +442,65 @@ async def scrape_messages(period, client, my_channel):
                 # print("Group:", message.grouped_id)
                 continue
             else: 
+                pass
                 print("ID:", message.id)
                 print("Group:", message.grouped_id)
             current_message = await get_message_dict(message, client, my_channel, groups, is_group= True, group_main_id = message.id)
-        # If reactions are missing, iterate to find them
-        if 'reactions' not in current_message.keys():
-            async for message in client.iter_messages(my_channel, ids = groups[group][::-1]):
-                if message.reactions:
-                    current_message['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in message.reactions.results if hasattr(reaction.reaction, 'emoticon')]
-                    break
-        # If replies are missing, iterate to find them
-        if 'replies' not in current_message.keys():
-            async for message in client.iter_messages(my_channel, ids = groups[group][::-1]):
-                if message.replies and message.replies.replies != 0:
-                    current_message['total replies'] = message.replies.replies
-                    current_message['replies'] = await get_replies(message, client, my_channel)
-                    break
-
-
-        messages[count] = current_message
-        print("")
-        count += 1
+            # TODO: shouldn't all of the below be inside the loop?
+            comments = await get_comments(message, client, my_channel)        
+            current_message['comments'] = comments
+            # If reactions are missing, iterate to find them
+            if 'reactions' not in current_message.keys():
+                async for message in client.iter_messages(my_channel, ids = groups[group][::-1]):
+                    if message.reactions:
+                        current_message['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in message.reactions.results if hasattr(reaction.reaction, 'emoticon')]
+                        break
+            messages.append(current_message)
     return messages
 
-def save_messages_to_db(messages, channel_id, con):    
+def save_messages_to_db(messages, con):    
     """ Save Message fields to DB """
     cur = con.cursor()
-    for msg in messages.items():
-        msg_col_names = [key for key in msg[1].keys() if key != 'media']
-        # add channel_id to all the column names
-        msg_col_values = [msg[1][key] for key in msg_col_names] 
+    exclude_fields = {'media', 'comments'}
+    for msg in messages:
+        msg_col_names = [key for key in msg.keys() if key not in exclude_fields]
+        msg_col_values = [msg[key] for key in msg_col_names] 
         columns = ', '.join(msg_col_names)
         placeholders = ', '.join('?' * len(msg_col_names))
         sql = 'INSERT INTO message ({}) VALUES ({})'.format(columns, placeholders)
         values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in msg_col_values]
         cur.execute(sql, values)
-        save_media_to_db(msg[1]['media'], cur.lastrowid, con)        
+        save_media_to_db(msg['media'], msg, None, con) 
+        save_comments_to_db(msg['comments'], msg, con) 
 
-def save_media_to_db(media, msg_id, con):    
+def save_media_to_db(media, msg, comment_id, con):    
     """ Save media blobs to DB """
     cur = con.cursor()
     for m in media:    
-        print(m)
-        data = convertToBinaryData(m['image_path'])
-        sql = 'INSERT INTO media (message_id, media) VALUES (?, ?)'
-        values = (msg_id, data)
+        if not len(m):
+            continue
+        # print(m)
+        data = convertToBinaryData(m['media_path'])
+        sql = 'INSERT INTO media (channel_id, message_id, comment_id, file_name, media) VALUES (?, ?, ?, ?, ?)'
+        file_name = os.path.basename(m['media_path'])
+        values = (msg['channel_id'], msg['id'], comment_id, file_name, data)
         # print(sql)
         cur.execute(sql, values)
 
+def save_comments_to_db(comments, msg, con):    
+    """ Save comments blobs to DB """
+    cur = con.cursor()
+    exclude_fields = {'media'}
+    for com in comments:    
+        com_col_names = [key for key in com.keys() if key not in exclude_fields]
+        com_col_values = [com[key] for key in com_col_names] 
+        columns = ', '.join(com_col_names)
+        placeholders = ', '.join('?' * len(com_col_names))        
+        sql = 'INSERT INTO comment ({}) VALUES ({})'.format(columns, placeholders)
+        values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in com_col_values]
+        print(sql)
+        cur.execute(sql, values)
+        save_media_to_db(com['media'], msg, cur.lastrowid, con) 
 
 def convertToBinaryData(filename):
     # Convert digital data to binary format
