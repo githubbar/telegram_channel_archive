@@ -38,7 +38,7 @@ async def config_session(inifile="config.ini"):
 
     # Initialize SQLite
     import sqlite3
-    con = sqlite3.connect("channels.sqlite")
+    con = sqlite3.connect(db_name)
     # con.close()
     scraper.create_db(con)
 
@@ -64,7 +64,7 @@ async def main():
     con, client = await config_session()
     ch_list = [channel_list[0]]
     # TEMP
-    con = sqlite3.connect('channels.sqlite')
+    con = sqlite3.connect('db.sqlite')
     scraper.create_db(con)
     # END TEMP
     try:
