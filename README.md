@@ -8,4 +8,12 @@ Telegram scraping for archiving the channels, messages and related content such 
 3) python main.py
 
 # Notes
-requirements is created via conda list -e > requirements.txt
+requirements is created via: conda list -e > requirements.txt
+
+# config.ini will look like this
+[Telegram]
+api_id = 
+api_hash = 
+phone = 
+username = 
+db_name = 

@@ -2,7 +2,6 @@
 # coding: utf-8
 from telescraper import scraper
 from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
 import datetime
 from dateutil.tz import *
 import sqlite3
@@ -11,13 +10,13 @@ import sqlite3
 
 # decided periods to scrape    
 # periods = [(None, None)]
-periods = [(datetime.datetime(2023, 2, 23, 17, 00), datetime.datetime(2023, 2, 23, 18, 00))]
-# periods = [(datetime.datetime(2022, 2, 27, 5, 32).astimezone(tzutc()), datetime.datetime(2022, 2, 27, 5, 33).astimezone(tzutc()))]
+# periods = [(datetime.datetime(2023, 2, 23, 17, 00), datetime.datetime(2023, 2, 23, 18, 00))]
+periods = [(datetime.datetime(2022, 2, 27, 5, 32).astimezone(tzutc()), datetime.datetime(2022, 2, 27, 5, 33).astimezone(tzutc()))]
 # periods = [(datetime.datetime(2022, 2, 28, 20, 2), datetime.datetime(2022, 2, 28, 20, 4))]
 # periods = [(datetime.datetime(2022, 2, 28, 15, 21), datetime.datetime(2022, 2, 28, 15, 23))]
 
-channel_list = ["https://t.me/activatica"]
-# channel_list = ["https://t.me/imnotbozhena"]
+# channel_list = ["https://t.me/activatica"]
+channel_list = ["https://t.me/imnotbozhena"]
 # channel_list = ["https://t.me/femagainstwar"]
 # channel_list = ["https://t.me/femagainstwar"]
 
@@ -25,47 +24,13 @@ channel_list = ["https://t.me/activatica"]
 # msg_id = 30917
 msg_id = None
 
-async def config_session(inifile="config.ini"):
-    config = scraper.configparser.ConfigParser()
-    config.read(inifile)
-
-    # setting configuration values
-    api_id = config.get('Telegram', 'api_id')
-    api_hash = config.get('Telegram', 'api_hash')
-    phone = config.get('Telegram', 'phone')
-    username = config.get('Telegram', 'username')
-    db_name = config.get('Telegram', 'db_name')
-
-    # Initialize SQLite
-    import sqlite3
-    con = sqlite3.connect(db_name)
-    # con.close()
-    scraper.create_db(con)
-
-    # create the client and connect
-    client = TelegramClient(username, api_id, api_hash)
-
-    # start the client
-    await client.start()
-    print("------------------- Client Created -----------------------")
-
-    # ensure you're authorized
-    if not await client.is_user_authorized():
-        await client.send_code_request(phone)
-        try:
-            await client.sign_in(phone, input('Enter the code: '))
-        except SessionPasswordNeededError:
-            print("Your account has two-step verification enabled. Please enter your password.")
-            await client.sign_in(password=input('Password: '))
-    return con, client
-
 async def main():
     import traceback
-    con, client = await config_session()
+    client = await scraper.config_session()
     ch_list = [channel_list[0]]
     # TEMP
-    con = sqlite3.connect('db.sqlite')
-    scraper.create_db(con)
+    # con = scraper.config_db()
+    con  = scraper.create_db()
     # END TEMP
     try:
         for usr in ch_list:

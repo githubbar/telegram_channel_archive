@@ -6,6 +6,7 @@ import json
 import asyncio
 import datetime
 from dateutil.relativedelta import relativedelta
+from telethon.errors import SessionPasswordNeededError
 
 import os, sys
 import numpy as np
@@ -28,6 +29,7 @@ import telethon.tl.types as media_types
 
 import os
 from collections import defaultdict
+import sqlite3
 
 # some functions to parse json date correctly
 class DateTimeEncoder(json.JSONEncoder):
@@ -40,13 +42,52 @@ class DateTimeEncoder(json.JSONEncoder):
 
         return json.JSONEncoder.default(self, o)
 
-# class Scraper:
-# Create DB tables
-def create_db(con, script_name = 'create_db.sql'):
-    with open(script_name, 'r') as sql_file:
+async def config_session(inifile="config.ini", sessionfile=None):
+    config = configparser.ConfigParser()
+    config.read(inifile)
+
+    # setting configuration values
+    api_id = config.get('Telegram', 'api_id')
+    api_hash = config.get('Telegram', 'api_hash')
+    phone = config.get('Telegram', 'phone')
+    username = config.get('Telegram', 'username')
+
+    print(username, api_id, api_hash)
+    # create the client and connect
+    if sessionfile:
+        client = TelegramClient(sessionfile, api_id, api_hash)
+    else:
+        client = TelegramClient(username, api_id, api_hash)
+
+    # start the client
+    await client.start()
+    print("------------------- Client Created -----------------------")
+
+    # ensure you're authorized
+    if not await client.is_user_authorized():
+        await client.send_code_request(phone)
+        try:
+            await client.sign_in(phone, input('Enter the code: '))
+        except SessionPasswordNeededError:
+            print("Your account has two-step verification enabled. Please enter your password.")
+            await client.sign_in(password=input('Password: '))
+    return client
+
+def config_db(inifile="config.ini"):
+    config = configparser.ConfigParser()
+    config.read(inifile)
+    db_name = config.get('Telegram', 'db_name')
+
+    # Initialize SQLite
+    con = sqlite3.connect(db_name)
+    return con
+
+def create_db(inifile="config.ini"):
+    con = sqlite3.connect('db.sqlite')
+    with open('create_db.sql', 'r') as sql_file:
         sql_script = sql_file.read()
-    cursor = con.cursor()
-    cursor.executescript(sql_script)
+        con.executescript(sql_script)
+    return con
 
 async def get_comment_dict(comment, client, message_id, my_channel, groups, is_group = False, group_main_id = None):
     comment_obj = {}
@@ -98,9 +139,7 @@ async def get_comments(message, client, my_channel):
     my_chat = await client.get_entity(chat_entity)
 
     # process replies
-    # TODO: error here telethon iter_messages channel post at channel_list = ["https://t.me/imnotbozhena"]
-
-    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id, limit = 25):
+    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id):
         comment_obj = await get_comment_dict(comment, client, message.id, my_channel, comment_groups)
 
         # if the message is part of the group keep track of ID that belong to the group
@@ -395,7 +434,7 @@ async def scrape_messages(period, client, my_channel, reply_to_id=None):
         # [print(f'    {c}') for c in comments]
         print("----------------------------------------------------------")        
         current_message = await get_message_dict(message, client, my_channel, groups)
-        current_message['comments'] = await get_comments(message, client, my_channel) if message.replies else None
+        current_message['comments'] = await get_comments(message, client, my_channel) if message.replies and message.replies.replies else None
         messages.append(current_message)
 
     # Coming back to the grouped messages
@@ -412,7 +451,7 @@ async def scrape_messages(period, client, my_channel, reply_to_id=None):
                 print("ID:", message.id)
                 print("Group:", message.grouped_id)
             current_message = await get_message_dict(message, client, my_channel, groups, is_group= True, group_main_id = message.id)
-            current_message['comments'] = await get_comments(message, client, my_channel) if message.replies else None
+            current_message['comments'] = await get_comments(message, client, my_channel) if message.replies and message.replies.replies else None
             # current_message['comments'] = None
             # If reactions are missing, iterate to find them
             if 'reactions' not in current_message.keys():

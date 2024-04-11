@@ -2,6 +2,13 @@
 # coding: utf-8
 import datetime
 import sqlite3
+from dateutil.tz import *
+from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
+
+import configparser
+
+
 start_time = None
 count = 0
 
