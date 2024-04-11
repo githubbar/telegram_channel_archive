@@ -42,44 +42,11 @@ class DateTimeEncoder(json.JSONEncoder):
 
 # class Scraper:
 # Create DB tables
-def create_db(con):
-    cur = con.cursor()
-    cur.execute("DROP TABLE IF EXISTS channel")
-    cur.execute("DROP TABLE IF EXISTS message")
-    cur.execute("DROP TABLE IF EXISTS comment")
-    cur.execute("DROP TABLE IF EXISTS media")    
-
-    cur.execute("""CREATE TABLE channel(
-    id INTEGER PRIMARY KEY,
-    title, username, description, total_particiant_time, total_participants, participants, 
-    creator,left,broadcast,verified,megagroup,restricted,signatures,min,scam,has_link,has_geo,slowmode_enabled,call_active,call_not_empty,fake,gigagroup,noforwards,join_to_send,join_request,forum,stories_hidden,stories_hidden_min,stories_unavailable,
-    chat, chat_title, chat_id,
-    chat_creator,chat_left,chat_broadcast,chat_verified,chat_megagroup,chat_restricted,chat_signatures,chat_min,chat_scam,chat_has_link,chat_has_geo,chat_slowmode_enabled,chat_call_active,chat_call_not_empty,chat_fake,chat_gigagroup,chat_noforwards,chat_join_to_send,chat_join_request,chat_forum,chat_stories_hidden,chat_stories_hidden_min,chat_stories_unavailable
-    )""")
-    cur.execute("""CREATE TABLE message(
-    id INTEGER PRIMARY KEY,
-    channel_id INTEGER NOT NULL,
-    date, post_author, text, mentions, total_views, total_fwds, hidden_edit, last_edit_date, scheduled, via_bot_id, noforwards, ttl_period, reactions,
-    fwd_title, fwd_username, fwd_channel_id
-    )""")
-    cur.execute("""CREATE TABLE comment(
-    id INTEGER PRIMARY KEY,
-    channel_id INTEGER NOT NULL,
-    message_id INTEGER NOT NULL,
-    date, text, reactions, reply_to_msg_id, quote_text, 
-    from_user_id INTEGER,
-    from_channel_id INTEGER,
-    channel_name, channel_username, 
-    fwd_title, fwd_username, fwd_channel_id
-    )""")    
-    cur.execute("""CREATE TABLE media(
-    id INTEGER PRIMARY KEY,
-    channel_id INTEGER NOT NULL,
-    message_id INTEGER NOT NULL,
-    comment_id INTEGER,
-    file_name,
-    media BLOB
-    )""")
+def create_db(con, script_name = 'create_db.sql'):
+    with open(script_name, 'r') as sql_file:
+        sql_script = sql_file.read()
+    cursor = con.cursor()
+    cursor.executescript(sql_script)
 
 async def get_comment_dict(comment, client, message_id, my_channel, groups, is_group = False, group_main_id = None):
     comment_obj = {}
@@ -133,7 +100,7 @@ async def get_comments(message, client, my_channel):
     # process replies
     # TODO: error here telethon iter_messages channel post at channel_list = ["https://t.me/imnotbozhena"]
 
-    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id):
+    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id, limit = 25):
         comment_obj = await get_comment_dict(comment, client, message.id, my_channel, comment_groups)
 
         # if the message is part of the group keep track of ID that belong to the group
@@ -428,8 +395,7 @@ async def scrape_messages(period, client, my_channel, reply_to_id=None):
         # [print(f'    {c}') for c in comments]
         print("----------------------------------------------------------")        
         current_message = await get_message_dict(message, client, my_channel, groups)
-        comments = await get_comments(message, client, my_channel)        
-        current_message['comments'] = comments
+        current_message['comments'] = await get_comments(message, client, my_channel) if message.replies else None
         messages.append(current_message)
 
     # Coming back to the grouped messages
@@ -446,9 +412,8 @@ async def scrape_messages(period, client, my_channel, reply_to_id=None):
                 print("ID:", message.id)
                 print("Group:", message.grouped_id)
             current_message = await get_message_dict(message, client, my_channel, groups, is_group= True, group_main_id = message.id)
-            # TODO: shouldn't all of the below be inside the loop?
-            comments = await get_comments(message, client, my_channel)        
-            current_message['comments'] = comments
+            current_message['comments'] = await get_comments(message, client, my_channel) if message.replies else None
+            # current_message['comments'] = None
             # If reactions are missing, iterate to find them
             if 'reactions' not in current_message.keys():
                 async for message in client.iter_messages(my_channel, ids = groups[group][::-1]):
@@ -488,6 +453,8 @@ def save_media_to_db(media, msg, comment_id, con):
         cur.execute(sql, values)
 
 def save_comments_to_db(comments, msg, con):    
+    if not comments: 
+        return
     """ Save comments blobs to DB """
     cur = con.cursor()
     exclude_fields = {'media'}
@@ -498,7 +465,7 @@ def save_comments_to_db(comments, msg, con):
         placeholders = ', '.join('?' * len(com_col_names))        
         sql = 'INSERT INTO comment ({}) VALUES ({})'.format(columns, placeholders)
         values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in com_col_values]
-        print(sql)
+        # print(sql)
         cur.execute(sql, values)
         save_media_to_db(com['media'], msg, cur.lastrowid, con) 
 
