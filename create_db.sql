@@ -22,7 +22,7 @@ CREATE TABLE comment(
     id INTEGER PRIMARY KEY,
     channel_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
-    date, text, reactions, reply_to_msg_id, quote_text, 
+    date, text, reactions, 
     from_user_id INTEGER,
     from_channel_id INTEGER,
     channel_name, channel_username, 
@@ -34,6 +34,7 @@ CREATE TABLE media(
     channel_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
     comment_id INTEGER,
+    type, 
     file_name,
     media BLOB
     );

@@ -1,3 +1,5 @@
 temp/
 config.ini
-'alex192838'.session
+*.session
+*.session-journal
+*.sqlite

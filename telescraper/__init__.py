@@ -42,5 +42,5 @@ def convert_timestamp(val):
     return datetime.datetime.fromtimestamp(int(val))
 
 sqlite3.register_converter("date", convert_date)
-sqlite3.register_converter("datetime", convert_datetime)
+sqlite3.register_converter("datetime", convert_datetime) # datetime instances save in Unix epoch format (https://en.wikipedia.org/wiki/Unix_time)
 sqlite3.register_converter("timestamp", convert_timestamp)

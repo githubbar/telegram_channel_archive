@@ -107,8 +107,6 @@ async def get_comment_dict(comment, client, message_id, my_channel, groups, is_g
             comment_obj['channel_username'] = comment_channel_info.chats[0].username
         except:
             pass
-        comment_obj['reply_to_msg_id'] = comment.reply_to_msg_id
-        comment_obj['quote_text'] = comment.quote_text
     if comment.reactions:
         comment_obj['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in comment.reactions.results if hasattr(reaction.reaction, 'emoticon')]
     comment_obj['fwd_title'], comment_obj['fwd_channel_id'], comment_obj['fwd_username'] = None, None, None
@@ -162,15 +160,15 @@ async def get_media(message, client, my_channel, groups, is_group, group_main_id
 #         print("Has media")
         if message.photo or (hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "image"):
             media[0] = await process_image(message, client, my_channel, groups, is_group, group_main_id, is_comment = is_comment, comment_media_id=comment_media_id)
-        # elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "video":
-        #     media[0] = process_video(message)
-        # elif hasattr(message.media, 'webpage'):
-        #     if hasattr(message.media.webpage, 'url'):
-        #         media[0]['url'] = message.media.webpage.url
-        # elif hasattr(message.media, 'poll'):
-        #     media[0] = process_poll(message)
-        # elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "audio":
-        #     media[0] = process_audio(message)
+        elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "video":
+            media[0] = process_video(message)
+        elif hasattr(message.media, 'webpage'):
+            if hasattr(message.media.webpage, 'url'):
+                media[0] = await process_webpage(message)
+        elif hasattr(message.media, 'poll'):
+            media[0] = process_poll(message)
+        elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "audio":
+            media[0] = process_audio(message)
         elif hasattr(message.media, 'document') and str(message.media.document.mime_type).split('/', 1)[0] == "application":
             media[0] = await process_document(message, client, groups, is_group, group_main_id, is_comment = is_comment, comment_media_id = comment_media_id)
         else:
@@ -191,15 +189,15 @@ async def process_media(message, client, my_channel, groups, is_group, group_mai
         if m.id != message.id:
             if m.photo or (hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "image"):
                 media_obj = await process_image(m, client, my_channel, groups, is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id=comment_media_id)
-            # elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "video":
-            #     media_obj = process_video(m)
-            # elif hasattr(m.media, 'webpage'):
-            #     if hasattr(m.media.webpage, 'url'):
-            #         media_obj['url'] = m.media.webpage.url
-            # elif hasattr(m.media, 'poll'):
-            #     media_obj = process_poll(m)
-            # elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "audio":
-            #     media_obj = process_audio(m)
+            elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "video":
+                media_obj = process_video(m)
+            elif hasattr(m.media, 'webpage'):
+                if hasattr(m.media.webpage, 'url'):
+                    media_obj = await process_webpage(m)
+            elif hasattr(m.media, 'poll'):
+                media_obj = process_poll(m)
+            elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "audio":
+                media_obj = process_audio(m)
             elif hasattr(m.media, 'document') and str(m.media.document.mime_type).split('/', 1)[0] == "application":
                 media_obj = await process_document(m, client, groups, is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
             
@@ -208,6 +206,14 @@ async def process_media(message, client, my_channel, groups, is_group, group_mai
             media_counter+=1
     return media
 
+
+async def process_webpage(message):
+#     print("Photo: True")
+    media_obj = {}
+    media_obj['type'] = 'webpage'
+    media_obj['file_name'] = message.media.webpage.url
+    return media_obj
+
 async def process_image(message, client, my_channel, groups, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
 #     print("Photo: True")
     media_obj = {}
@@ -215,11 +221,11 @@ async def process_image(message, client, my_channel, groups, is_group, group_mai
     folder = './temp'
     folder_path = str(folder+"/"+"images/") # this will be in images folder of the channel
     media_obj['group_main_id'] = group_main_id
-    media_obj['media_path'] = await download_media(message, folder_path, client, groups, "photo", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
+    media_obj['file_name'] = await download_media(message, folder_path, client, groups, "photo", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
     return media_obj
 
 def process_video(message):
-#     print("Video: True")
+    # print("Video: True")
     media_obj = {}
     media_obj['type'] = "video"
     media_obj['video_type'] = str(message.media.document.mime_type).split('/', 1)[1]
@@ -229,7 +235,7 @@ def process_video(message):
     try:
         media_obj['file_name'] = message.media.document.attributes[1].file_name
     except:
-        media_obj['file_name'] = None
+        media_obj['file_name'] = ''
     return media_obj
 
 def process_poll(message):
@@ -253,21 +259,21 @@ def process_audio(message):
     try:
         media_obj['file_name'] = message.media.document.attributes[1].file_name
     except:
-        media_obj['file_name'] = None
+        media_obj['file_name'] = ''
     return media_obj
 
 async def process_document(message, client, groups, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
-    print("Doc: True")
+    # print("Doc: True")
     media_obj = {}
     media_obj['type'] = "document"
     media_obj['document_size'] = message.media.document.size
     try:
         media_obj['file_name'] = message.media.document.attributes[1].file_name
     except:
-        media_obj['file_name'] = None
+        media_obj['file_name'] = ''
     folder = './temp'
     folder_path = str(folder+"/"+"documents/")
-    media_obj['media_path'] = await download_media(message, folder_path, client, groups, "doc", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
+    media_obj['file_name'] = await download_media(message, folder_path, client, groups, "doc", is_group, group_main_id, media_counter = media_counter, is_comment = is_comment, comment_media_id = comment_media_id)
     return media_obj
 
 async def download_media(message, folder_path, client, groups, file_type, is_group, group_main_id, media_counter = 0, is_comment=False, comment_media_id = None):
@@ -360,17 +366,6 @@ async def get_channel(usr, client):
                 channel_info[f'chat_{attr}'] = value    
     return channel_info
 
-def save_channel_to_db(channel_info, con):    
-    """ Save Channel fields to DB """
-    cur = con.cursor()
-    columns = ', '.join(channel_info.keys())
-    placeholders = ', '.join('?' * len(channel_info))
-    sql = 'INSERT INTO channel ({}) VALUES ({})'.format(columns, placeholders)
-    values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in channel_info.values()]
-    # print(sql)
-    # print(values)
-    cur.execute(sql, values)
-
 async def get_message_dict(message, client, my_channel, groups, is_group = False, group_main_id = None):
     current_message = {}
     current_message['id'] = message.id
@@ -409,7 +404,7 @@ async def get_message_dict(message, client, my_channel, groups, is_group = False
     
     return current_message
 
-async def scrape_messages(period, client, my_channel, reply_to_id=None):
+async def scrape_messages(period, client, my_channel):
     messages = []
     groups = {}
     # Handle time periods or no time periods
@@ -418,8 +413,8 @@ async def scrape_messages(period, client, my_channel, reply_to_id=None):
     else:
         dt1 = dt2 = None
 
-    async for message in client.iter_messages(my_channel, reply_to = reply_to_id, offset_date = dt2):
-        if (dt1 and dt2) and dt1 > message.date and not reply_to_id: # skip if not in date range, but keep all the comments
+    async for message in client.iter_messages(my_channel, offset_date = dt2):
+        if (dt1 and dt2) and dt1 > message.date: # skip if not in date range, but keep all the comments
             break 
 
         # if the message is part of the group keep track of IDs that belong to the group
@@ -462,6 +457,20 @@ async def scrape_messages(period, client, my_channel, reply_to_id=None):
             messages.append(current_message)
     return messages
 
+def save_channel_to_db(channel_info, con):    
+    """ Save Channel fields to DB """
+    cur = con.cursor()
+    columns = ', '.join(channel_info.keys())
+    placeholders = ', '.join('?' * len(channel_info))
+    sql = 'INSERT INTO channel ({}) VALUES ({})'.format(columns, placeholders)
+    values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in channel_info.values()]
+    # print(sql)
+    # print(values)
+    try:
+        cur.execute(sql, values)
+    except sqlite3.IntegrityError as e:
+        print(f'INFO: Channel title={channel_info['title']} already in DB.')
+
 def save_messages_to_db(messages, con):    
     """ Save Message fields to DB """
     cur = con.cursor()
@@ -473,9 +482,12 @@ def save_messages_to_db(messages, con):
         placeholders = ', '.join('?' * len(msg_col_names))
         sql = 'INSERT INTO message ({}) VALUES ({})'.format(columns, placeholders)
         values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in msg_col_values]
-        cur.execute(sql, values)
-        save_media_to_db(msg['media'], msg, None, con) 
-        save_comments_to_db(msg['comments'], msg, con) 
+        try:
+            cur.execute(sql, values)
+            save_media_to_db(msg['media'], msg, None, con) 
+            save_comments_to_db(msg['comments'], msg, con) 
+        except sqlite3.IntegrityError as e:
+            print(f'INFO: Message id={msg['id']} already in DB.')
 
 def save_media_to_db(media, msg, comment_id, con):    
     """ Save media blobs to DB """
@@ -484,10 +496,13 @@ def save_media_to_db(media, msg, comment_id, con):
         if not len(m):
             continue
         # print(m)
-        data = convertToBinaryData(m['media_path'])
-        sql = 'INSERT INTO media (channel_id, message_id, comment_id, file_name, media) VALUES (?, ?, ?, ?, ?)'
-        file_name = os.path.basename(m['media_path'])
-        values = (msg['channel_id'], msg['id'], comment_id, file_name, data)
+        if m['type'] in {'photo', 'document'}:
+            data = convertToBinaryData(m['file_name'])
+        else:
+            data =  None
+        sql = 'INSERT INTO media (channel_id, message_id, comment_id, type, file_name, media) VALUES (?, ?, ?, ?, ?, ?)'
+        file_name = os.path.basename(m['file_name'])
+        values = (msg['channel_id'], msg['id'], comment_id, m['type'], file_name, data)
         # print(sql)
         cur.execute(sql, values)
 
