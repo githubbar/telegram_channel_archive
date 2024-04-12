@@ -10,7 +10,7 @@ import sqlite3
 
 # decided periods to scrape    
 start1 = datetime.datetime(2022, 2, 25, 0, 0)
-periods = [(start1, start1 + datetime.timedelta(days=100))]
+periods = [(start1, start1 + datetime.timedelta(days=1))]
 # periods = [(datetime.datetime(2022, 2, 24, 6, 2).astimezone(tzutc()), datetime.datetime(2022, 2, 24, 6, 3).astimezone(tzutc()))]
 # periods = [(datetime.datetime(2023, 2, 23, 17, 00), datetime.datetime(2023, 2, 23, 18, 00))]
 # periods = [(datetime.datetime(2022, 2, 27, 5, 32).astimezone(tzutc()), datetime.datetime(2022, 2, 27, 5, 33).astimezone(tzutc()))]

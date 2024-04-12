@@ -77,12 +77,10 @@ def config_db(inifile="config.ini"):
     config = configparser.ConfigParser()
     config.read(inifile)
     db_name = config.get('Telegram', 'db_name')
-    # Create new db
-    if not os.path.isfile(db_name):
-        return create_db(inifile)
+
     # Initialize SQLite
-    else:
-        return sqlite3.connect(db_name)
+    con = sqlite3.connect(db_name)
+    return con
 
 def create_db(inifile="config.ini"):
     con = sqlite3.connect('db.sqlite')
@@ -425,7 +423,7 @@ async def scrape_messages(period, client, my_channel):
             #skip the message as we will go through it when downloading media
             continue
         
-        print("ID:", message.id)        
+        print(f'ID: {message.id} date: {message.date:%m/%d/%Y, %H:%M:%S}')        
         
 
         # [print(f'    {c}') for c in comments]
