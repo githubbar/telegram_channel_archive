@@ -77,10 +77,12 @@ def config_db(inifile="config.ini"):
     config = configparser.ConfigParser()
     config.read(inifile)
     db_name = config.get('Telegram', 'db_name')
-
+    # Create new db
+    if not os.path.isfile(db_name):
+        return create_db(inifile)
     # Initialize SQLite
-    con = sqlite3.connect(db_name)
-    return con
+    else:
+        return sqlite3.connect(db_name)
 
 def create_db(inifile="config.ini"):
     con = sqlite3.connect('db.sqlite')

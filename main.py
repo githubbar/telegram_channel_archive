@@ -35,7 +35,7 @@ async def main():
     client = await scraper.config_session()
     ch_list = [channel_list[0]]
     con = scraper.config_db()
-    # con  = scraper.create_db()
+    
     try:
         for usr in ch_list:
             channel_info = await scraper.get_channel(usr, client)
