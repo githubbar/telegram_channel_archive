@@ -3,11 +3,7 @@
 
 import os, pathlib
 import pytest
-import asyncio
 
-os.chdir( pathlib.Path.cwd() / 'tests' )
+# os.chdir( pathlib.Path.cwd() / 'tests' )
 
-pytest.main()
-
-# loop = asyncio.get_event_loop()
-# loop.stop()
+pytest.main(["-x", "tests"])

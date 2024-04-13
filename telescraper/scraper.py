@@ -206,7 +206,6 @@ async def process_media(message, client, my_channel, groups, is_group, group_mai
             media_counter+=1
     return media
 
-
 async def process_webpage(message):
 #     print("Photo: True")
     media_obj = {}
@@ -304,7 +303,7 @@ async def download_media(message, folder_path, client, groups, file_type, is_gro
             wait_time *= 2 # Exponential backoff
     print(f"Failed to download file after {max_retries} attempts. {message.media}")
 
-async def get_channel(usr, client):
+async def get_channel(client, usr):
     """
     Fetches detailed information about a Telegram channel or chat based on the provided `usr` identifier (either a numeric ID or username) using a given `client` connection. 
     This function:
@@ -404,7 +403,7 @@ async def get_message_dict(message, client, my_channel, groups, is_group = False
     
     return current_message
 
-async def scrape_messages(period, client, my_channel):
+async def scrape_messages(client, my_channel, period=(None, None), ids=None):
     messages = []
     groups = {}
     # Handle time periods or no time periods
@@ -413,7 +412,7 @@ async def scrape_messages(period, client, my_channel):
     else:
         dt1 = dt2 = None
 
-    async for message in client.iter_messages(my_channel, offset_date = dt2):
+    async for message in client.iter_messages(my_channel, offset_date = dt2, ids=ids):
         if (dt1 and dt2) and dt1 > message.date: # skip if not in date range, but keep all the comments
             break 
 
@@ -427,7 +426,7 @@ async def scrape_messages(period, client, my_channel):
         
 
         # [print(f'    {c}') for c in comments]
-        print("----------------------------------------------------------")        
+        # print("----------------------------------------------------------")        
         current_message = await get_message_dict(message, client, my_channel, groups)
         current_message['comments'] = await get_comments(message, client, my_channel) if message.replies and message.replies.replies else None
         messages.append(current_message)
@@ -443,8 +442,7 @@ async def scrape_messages(period, client, my_channel):
                 continue
             else: 
                 pass
-                print("ID:", message.id)
-                print("Group:", message.grouped_id)
+                print(f'Group ID: {message.id} date: {message.date:%m/%d/%Y, %H:%M:%S}')        
             current_message = await get_message_dict(message, client, my_channel, groups, is_group= True, group_main_id = message.id)
             current_message['comments'] = await get_comments(message, client, my_channel) if message.replies and message.replies.replies else None
             # current_message['comments'] = None

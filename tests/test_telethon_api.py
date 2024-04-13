@@ -23,29 +23,29 @@ def cancel_all_tasks(exclude_current=False):
         # request the task cancel
         task.cancel()
 
-@pytest.mark.parametrize('ini_file', ['../config.ini'])
-async def test_grouped_media(ini_file):
+@pytest.mark.parametrize(
+        "usr, msgids, imgCount", [
+            ("https://t.me/imnotbozhena", [23421, 23422,23423,23424], 4),
+            ("https://t.me/warfakes", [3, 4], 2),
+            ]
+    )
+async def test_grouped_media(usr, msgids, imgCount):
     """ Test groupped media """
-    # periods = [(datetime.datetime(2023, 2, 23, 17, 00), datetime.datetime(2023, 2, 23, 18, 00))]
-    periods = [(datetime.datetime(2022, 2, 27, 5, 32).astimezone(tzutc()), datetime.datetime(2022, 2, 27, 5, 33).astimezone(tzutc()))]
-
-    usr = "https://t.me/imnotbozhena"
-    msg_id = None
-    # assert 1 == 1
-    # monkeypatch.setattr('sys.stdin', io.StringIO('+18128372006'))    
-    client = await scraper.config_session(ini_file, "../'alex192838'.session")
-    channel_info = await scraper.get_channel(usr, client)
+    client = await scraper.config_session()
+    channel_info = await scraper.get_channel(client, usr)
     my_channel = await client.get_entity(usr)
     count = 0
-    for period in periods:
-        print("----------------------------------------------------------")
-        messages = await scraper.scrape_messages(period, client, my_channel, msg_id)
-        for msg in messages:
-            for med in msg['media']:
-                count+=1
-    assert count == 4
-
-    # Wait for a disconnection to occur
-    client.disconnect()
-    while client.is_connected():
-        await asyncio.sleep(0.1)
+    msg = await scraper.scrape_messages(client, my_channel, ids=msgids)
+    # period = (datetime.datetime(2022, 2, 27, 5, 32).astimezone(tzutc()), datetime.datetime(2022, 2, 27, 5, 33).astimezone(tzutc()))
+    # msg = await scraper.scrape_messages(client, my_channel, period = period)
+    print(msg)
+    for m in msg:
+        for med in m['media']:
+            count+=1
+    try:
+        assert count == imgCount
+    finally:
+        # Wait for a disconnection to occur
+        client.disconnect()
+        while client.is_connected():
+            await asyncio.sleep(0.1)
