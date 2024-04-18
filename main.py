@@ -9,10 +9,17 @@ import sqlite3
 # https://t.me/activatica/30924?comment=6828
 
 # decided periods to scrape    
-skipToChannelNumber = 0
+skipToChannelNumber = 1
 # take first 100 days since channels were started
-starts = [datetime.datetime(2022, 2, 25, 0, 0), datetime.datetime(2022, 3, 15, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
-periods = [(start, start + datetime.timedelta(days=100)) for start in starts]
+# starts = [datetime.datetime(2023, 2, 25, 0, 0), datetime.datetime(2023, 3, 15, 0, 0), datetime.datetime(2023, 2, 27, 0, 0)]
+# BEGIN TEMP
+# TODO: fix https://t.me/mpartisans/27 not saving to DB
+starts = [datetime.datetime(2022, 2, 25, 0, 0), datetime.datetime(2022, 3, 21, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
+periods = [(start, start + datetime.timedelta(days=1)) for start in starts]
+# END TEMP
+# periods = [(start, start + datetime.timedelta(days=100)) for start in starts]
+# starts = [datetime.datetime(2022, 3, 14, 0, 0), datetime.datetime(2022, 3, 15, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
+# periods = [(start, start + datetime.timedelta(days=1)) for start in starts]
     
 # periods = [(datetime.datetime(2022, 2, 24, 6, 2).astimezone(tzutc()), datetime.datetime(2022, 2, 24, 6, 3).astimezone(tzutc()))]
 
@@ -39,7 +46,7 @@ async def main():
     
     try:
         for n, usr in enumerate(channel_list):
-            if n <= skipToChannelNumber:
+            if n < skipToChannelNumber:
                 continue
             channel_info = await scraper.get_channel(client, usr)
           

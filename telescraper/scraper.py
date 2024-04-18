@@ -96,6 +96,7 @@ async def get_comment_dict(comment, client, message_id, my_channel, groups, is_g
     comment_obj['date'] = comment.date
     comment_obj['text'] = comment.text
     comment_obj['message_id'] = message_id
+
     if hasattr(comment.from_id, 'user_id'):
         comment_obj['from_user_id'] = comment.from_id.user_id
     elif hasattr(comment.from_id, 'channel_id'):
@@ -138,18 +139,18 @@ async def get_comments(message, client, my_channel):
 
     # process replies
     async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id):
-        comment_obj = await get_comment_dict(comment, client, message.id, my_channel, comment_groups)
-
-        # if the message is part of the group keep track of ID that belong to the group
+    # if the message is part of the group keep track of ID that belong to the group
         if comment.grouped_id:
             comment_groups.setdefault(comment.grouped_id, []).append(comment.id)
             print("Comment Group:", comment_groups)
             if comment.text == "":
                 #skip the message as we will go through it when downloading media
-                continue
-        
+                continue    
+                    
+        comment_obj = await get_comment_dict(comment, client, message.id, my_channel, comment_groups)
+       
         if comment_obj:
-                replies.append(comment_obj)
+            replies.append(comment_obj)
 
     return replies
 
