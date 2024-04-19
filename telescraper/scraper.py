@@ -79,7 +79,7 @@ def config_db(inifile="config.ini"):
     db_name = config.get('Telegram', 'db_name')
 
     # Initialize SQLite
-    con = sqlite3.connect(db_name)
+    con = sqlite3.connect(db_name, autocommit=False)
     return con
 
 def create_db(inifile="config.ini"):
@@ -89,46 +89,9 @@ def create_db(inifile="config.ini"):
         con.executescript(sql_script)
     return con
 
-async def get_comment_dict(comment, client, message_id, my_channel, groups, is_group = False, group_main_id = None):
-    comment_obj = {}
-    comment_obj['id'] = comment.id
-    comment_obj['channel_id'] = my_channel.id    
-    comment_obj['date'] = comment.date
-    comment_obj['text'] = comment.text
-    comment_obj['message_id'] = message_id
-
-    if hasattr(comment.from_id, 'user_id'):
-        comment_obj['from_user_id'] = comment.from_id.user_id
-    elif hasattr(comment.from_id, 'channel_id'):
-        comment_obj['from_channel_id'] = comment.from_id.channel_id
-        try:
-            comment_channel = await client.get_entity(PeerChannel(int(comment.from_id.channel_id)))
-            comment_channel_info = await client(GetFullChannelRequest(channel=comment_channel))
-            comment_obj['channel_name'] = comment_channel_info.chats[0].title
-            comment_obj['channel_username'] = comment_channel_info.chats[0].username
-        except:
-            pass
-    if comment.reactions:
-        comment_obj['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in comment.reactions.results if hasattr(reaction.reaction, 'emoticon')]
-    comment_obj['fwd_title'], comment_obj['fwd_channel_id'], comment_obj['fwd_username'] = None, None, None
-    if comment.fwd_from:
-        try:
-            fwd_from_channel = await client.get_entity(PeerChannel(int(comment.fwd_from.from_id.channel_id)))
-            fwd_channel_info = await client(GetFullChannelRequest(channel=fwd_from_channel))
-            comment_obj['fwd_title'] = fwd_channel_info.chats[0].title
-            comment_obj['fwd_username'] = fwd_channel_info.chats[0].username
-        except:
-            if comment.fwd_from.from_id:
-                comment_obj['fwd_channel_id'] = int(comment.fwd_from.from_id.channel_id)
-            if comment.fwd_from.from_name:
-                comment_obj['fwd_title'] = comment.fwd_from.from_name
-    
-    comment_obj['media'] = await get_media(comment, client, my_channel, groups, is_group, group_main_id)
-    
-    return comment_obj
-
 async def get_comments(message, client, my_channel):
     replies = []
+    comment_count = 0
     comment_groups = {}
     
     #find the replies in chat
@@ -138,17 +101,51 @@ async def get_comments(message, client, my_channel):
     my_chat = await client.get_entity(chat_entity)
 
     # process replies
-    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id):
-    # if the message is part of the group keep track of ID that belong to the group
+    async for comment in client.iter_messages(my_channel, reverse=True, reply_to = message.id, limit = 25):
+        comment_obj = {}
+        # if the message is part of the group keep track of ID that belong to the group
         if comment.grouped_id:
             comment_groups.setdefault(comment.grouped_id, []).append(comment.id)
             print("Comment Group:", comment_groups)
             if comment.text == "":
                 #skip the message as we will go through it when downloading media
-                continue    
-                    
-        comment_obj = await get_comment_dict(comment, client, message.id, my_channel, comment_groups)
-       
+                continue
+        if hasattr(comment.from_id, 'user_id'):
+            comment_obj['user id'] = comment.from_id.user_id
+        elif hasattr(comment.from_id, 'channel_id'):
+            comment_obj['channel id'] = comment.from_id.channel_id
+            try:
+                comment_channel = await client.get_entity(PeerChannel(int(comment.from_id.channel_id)))
+                comment_channel_info = await client(GetFullChannelRequest(channel=comment_channel))
+                comment_obj['channel name'] = comment_channel_info.chats[0].title
+                comment_obj['channel username'] = comment_channel_info.chats[0].username
+            except:
+                pass
+
+        comment_obj['comment date'] = comment.date
+        comment_obj['comment text'] = comment.message
+
+
+        if comment.reactions:
+            comment_obj['reactions'] = [(reaction.reaction.emoticon, reaction.count) for reaction in comment.reactions.results if hasattr(reaction.reaction, 'emoticon')]
+        
+        if comment.fwd_from:
+            comment_obj['fwd'] = {}
+            try:
+                fwd_from_channel = await client.get_entity(PeerChannel(int(comment.fwd_from.from_id.channel_id)))
+                fwd_channel_info = await client(GetFullChannelRequest(channel=fwd_from_channel))
+                comment_obj['fwd']['fwd_title'] = fwd_channel_info.chats[0].title
+                comment_obj['fwd']['fwd_username'] = fwd_channel_info.chats[0].username
+            except:
+                if comment.fwd_from.from_id:
+                    comment_obj['fwd']['channel_id'] = int(comment.fwd_from.from_id.channel_id)
+                if comment.fwd_from.from_name:
+                    comment_obj['fwd']['fwd_title'] = comment.fwd_from.from_name
+        
+        # Media in comments naminng is photo[message_id]_comment[comment_number]
+        if comment.media:
+            comment_obj['media'] = await get_media(comment, client, my_chat, comment_groups, is_group = False, group_main_id = None, is_comment = True, comment_media_id = str(message.id)+"_comment"+str(comment_count))
+
         if comment_obj:
             replies.append(comment_obj)
 
@@ -467,8 +464,10 @@ def save_channel_to_db(channel_info, con):
     # print(values)
     try:
         cur.execute(sql, values)
+        con.commit()
     except sqlite3.IntegrityError as e:
         print(f'INFO: Channel title={channel_info['title']} already in DB.')
+        con.rollback()
 
 def save_messages_to_db(messages, con):    
     """ Save Message fields to DB """
@@ -485,8 +484,10 @@ def save_messages_to_db(messages, con):
             cur.execute(sql, values)
             save_media_to_db(msg['media'], msg, None, con) 
             save_comments_to_db(msg['comments'], msg, con) 
+            con.commit()
         except sqlite3.IntegrityError as e:
             print(f'INFO: Message id={msg['id']} already in DB.')
+            con.rollback()
 
 def save_media_to_db(media, msg, comment_id, con):    
     """ Save media blobs to DB """
@@ -503,7 +504,10 @@ def save_media_to_db(media, msg, comment_id, con):
         file_name = os.path.basename(m['file_name'])
         values = (msg['channel_id'], msg['id'], comment_id, m['type'], file_name, data)
         # print(sql)
-        cur.execute(sql, values)
+        try:
+            cur.execute(sql, values)
+        except sqlite3.IntegrityError as e:
+            print(f'INFO: Media for message id={msg['id']} already in DB.')
 
 def save_comments_to_db(comments, msg, con):    
     if not comments: 
@@ -520,7 +524,12 @@ def save_comments_to_db(comments, msg, con):
         values = [str(x).replace('\'', '') if isinstance(x, list) else x for x in com_col_values]
         # print(sql)
         cur.execute(sql, values)
-        save_media_to_db(com['media'], msg, cur.lastrowid, con) 
+        # IF this comment has media
+        try:
+            if com['media']:
+                save_media_to_db(com['media'], msg, cur.lastrowid, con) 
+        except sqlite3.IntegrityError as e:
+                    print(f'INFO: Comment for message id={msg['id']} already in DB.')
 
 def convertToBinaryData(filename):
     # Convert digital data to binary format
