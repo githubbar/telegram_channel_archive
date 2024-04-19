@@ -9,10 +9,10 @@ import sqlite3
 # https://t.me/activatica/30924?comment=6828
 
 # Take first 100 days since channels were started
-skipToChannelNumber = 2 # Temporary
+skipToChannelNumber = 0 # Temporary
 channel_list = ["https://t.me/femagainstwar", "https://t.me/mpartisans", "https://t.me/zelenayalenta"]
-starts = [datetime.datetime(2022, 2, 25, 0, 0), datetime.datetime(2022, 3, 15, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
-# periods = [(start, start + datetime.timedelta(days=98)) for start in starts]
+# starts = [datetime.datetime(2022, 2, 25, 0, 0), datetime.datetime(2022, 3, 15, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
+starts = [datetime.datetime(2023, 2, 25, 0, 0), datetime.datetime(2023, 3, 15, 0, 0), datetime.datetime(2023, 2, 27, 0, 0)]
 periods = [(start, start + datetime.timedelta(days=100)) for start in starts]
 
 async def main():
