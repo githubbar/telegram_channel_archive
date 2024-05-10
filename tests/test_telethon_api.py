@@ -25,7 +25,7 @@ def cancel_all_tasks(exclude_current=False):
 
 @pytest.mark.parametrize(
         "usr, msgids, imgCount", [
-            ("https://t.me/imnotbozhena", [23421, 23422,23423,23424], 4),
+            ("https://t.me/imnotbozhena", [23421, 23422, 23423,23424], 4),
             ("https://t.me/warfakes", [3, 4], 2),
             ]
     )

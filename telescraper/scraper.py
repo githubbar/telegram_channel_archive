@@ -32,16 +32,6 @@ from collections import defaultdict
 import sqlite3
 
 # some functions to parse json date correctly
-class DateTimeEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, datetime.datetime):
-            return o.isoformat()
-
-        if isinstance(o, bytes):
-            return list(o)
-
-        return json.JSONEncoder.default(self, o)
-
 async def config_session(inifile="config.ini", sessionfile=None):
     config = configparser.ConfigParser()
     config.read(inifile)
