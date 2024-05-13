@@ -2,7 +2,7 @@
 	- Channel Created, Channel Photo Updated, Pinned Message
 	identifiable by: WHERE message.text=NULL
 
-- Messages with text filed empty (but not NULL)
+- Messages with text field empty (but not NULL)
 	- These are just posts without text. Mostly images.
 
 - Messages with content forwarded from other channels:
