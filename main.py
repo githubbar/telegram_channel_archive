@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
+import os
+# The environment complains without it
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 from telescraper import scraper
 from telethon import TelegramClient
 import datetime
 from dateutil.tz import *
 import sqlite3
-
+8128372006
 # https://t.me/activatica/30924?comment=6828
 
 # Take first 100 days since channels were started
