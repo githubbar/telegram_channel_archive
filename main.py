@@ -15,8 +15,12 @@ import sqlite3
 skipToChannelNumber = 0 # Temporary
 channel_list = ["https://t.me/femagainstwar", "https://t.me/mpartisans", "https://t.me/zelenayalenta"]
 # starts = [datetime.datetime(2022, 2, 25, 0, 0), datetime.datetime(2022, 3, 15, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
+# starts = [datetime.datetime(2023, 2, 25, 0, 0), datetime.datetime(2023, 3, 15, 0, 0), datetime.datetime(2023, 2, 27, 0, 0)]
+# periods = [(start, start + datetime.timedelta(days=100)) for start in starts]
+# starts = [datetime.datetime(2022, 2, 25, 0, 0), datetime.datetime(2022, 3, 15, 0, 0), datetime.datetime(2022, 2, 27, 0, 0)]
+# periods = [(start + datetime.timedelta(days=101), datetime.datetime(2022, 7, 1, 0, 0)) for start in starts]
 starts = [datetime.datetime(2023, 2, 25, 0, 0), datetime.datetime(2023, 3, 15, 0, 0), datetime.datetime(2023, 2, 27, 0, 0)]
-periods = [(start, start + datetime.timedelta(days=100)) for start in starts]
+periods = [(start + datetime.timedelta(days=101), datetime.datetime(2023, 7, 1, 0, 0)) for start in starts]
 
 async def main():
     import traceback
